@@ -113,6 +113,8 @@ def main(args):
 
     accelerator = None if len(cfg.device.gpu_ids) <= 1 else "ddp"
 
+    ckpt = torch.load("/home/laughing/nanodet/weights/nanodet-plus-m-1.5x_416_checkpoint.ckpt")
+    task.model.load_state_dict(ckpt, strict=False)
     trainer = pl.Trainer(
         default_root_dir=cfg.save_dir,
         max_epochs=cfg.schedule.total_epochs,
@@ -121,7 +123,7 @@ def main(args):
         accelerator=accelerator,
         log_every_n_steps=cfg.log.interval,
         num_sanity_val_steps=0,
-        resume_from_checkpoint=model_resume_path,
+        # resume_from_checkpoint=model_resume_path,
         callbacks=[ProgressBar(refresh_rate=0)],  # disable tqdm bar
         logger=logger,
         benchmark=True,

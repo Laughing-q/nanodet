@@ -117,3 +117,14 @@ work_dirs/
 *.pth
 *.py~
 *.sh~
+
+# export
+*.onnx
+*.engine
+
+# log
+runs/*
+workspace/*
+weights/*
+config/*
+*.txt

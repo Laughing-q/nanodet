@@ -62,10 +62,14 @@ class Integral(nn.Module):
                 offsets from the box center in four directions, shape (N, 4).
         """
         shape = x.size()
-        x = F.softmax(x.reshape(*shape[:-1], 4, self.reg_max + 1), dim=-1)
-        x = F.linear(x, self.project.type_as(x)).reshape(*shape[:-1], 4)
+        # N, H*W, 4, 8
+        if torch.onnx.is_in_onnx_export():
+            x = F.softmax(x.reshape(int(shape[0]), int(shape[1]), 4, self.reg_max + 1), dim=-1)
+            x = x.matmul(self.project.type_as(x))
+        else:
+            x = F.softmax(x.reshape(*shape[:-1], 4, self.reg_max + 1), dim=-1)
+            x = F.linear(x, self.project.type_as(x)).reshape(*shape[:-1], 4)
         return x
-
 
 class GFLHead(nn.Module):
     """Generalized Focal Loss: Learning Qualified and Distributed Bounding

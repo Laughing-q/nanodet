@@ -56,7 +56,7 @@ def multiclass_nms(
             )
         return bboxes, labels
 
-    dets, keep = batched_nms(bboxes, scores, labels, nms_cfg)
+    dets, keep = batched_nms(bboxes.float(), scores.float(), labels.float(), nms_cfg)
 
     if max_num > 0:
         dets = dets[:max_num]
@@ -104,7 +104,7 @@ def batched_nms(boxes, scores, idxs, nms_cfg, class_agnostic=False):
     nms_cfg_.pop("type", "nms")
     split_thr = nms_cfg_.pop("split_thr", 10000)
     if len(boxes_for_nms) < split_thr:
-        keep = nms(boxes_for_nms, scores, **nms_cfg_)
+        keep = nms(boxes_for_nms, scores, **nms_cfg_)  # torch.nms需要fp32
         boxes = boxes[keep]
         scores = scores[keep]
     else:

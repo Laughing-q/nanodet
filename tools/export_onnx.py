@@ -18,6 +18,9 @@ import os
 import onnx
 import onnxsim
 import torch
+from yolo.data.augmentations import letterbox
+import numpy as np
+import cv2
 
 from nanodet.model.arch import build_model
 from nanodet.util import Logger, cfg, load_config, load_model_weight
@@ -43,9 +46,19 @@ def main(config, model_path, output_path, input_shape=(320, 320)):
         from nanodet.model.backbone.repvgg import repvgg_det_model_convert
 
         model = repvgg_det_model_convert(model, deploy_model)
-    dummy_input = torch.autograd.Variable(
-        torch.randn(1, 3, input_shape[0], input_shape[1])
-    )
+    # dummy_input = torch.autograd.Variable(
+    #     torch.randn(1, 3, input_shape[0], input_shape[1])
+    # )
+    # img = cv2.imread('/e/datasets/贵阳银行/play_phone/guiyang0721/images/train/3_0.jpg')
+    # img = letterbox(img, auto=False, new_shape=(416, 416))[0]
+    # img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
+    # img = np.ascontiguousarray(img)
+    # dummy_input = torch.from_numpy(img)[None, ...]
+
+    dummy_input = torch.zeros(1, 3, input_shape[0], input_shape[1])
+    dummy_input = dummy_input.cuda().half()
+    model.cuda().half()
+    model.eval()
 
     torch.onnx.export(
         model,
@@ -53,7 +66,7 @@ def main(config, model_path, output_path, input_shape=(320, 320)):
         output_path,
         verbose=True,
         keep_initializers_as_inputs=True,
-        opset_version=11,
+        opset_version=12,
         input_names=["data"],
         output_names=["output"],
     )

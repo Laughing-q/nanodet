@@ -133,7 +133,8 @@ class NanoDetPlusHead(nn.Module):
 
     def forward(self, feats):
         if torch.onnx.is_in_onnx_export():
-            return self._forward_onnx(feats)
+            # return self._forward_onnx(feats)
+            return self._forward_onnx_get_bboxes(feats)
         outputs = []
         for feat, cls_convs, gfl_cls in zip(
             feats,
@@ -457,6 +458,7 @@ class NanoDetPlusHead(nn.Module):
         center_priors = torch.cat(mlvl_center_priors, dim=1)
         dis_preds = self.distribution_project(reg_preds) * center_priors[..., 2, None]
         bboxes = distance2bbox(center_priors[..., :2], dis_preds, max_shape=input_shape)
+        # N, num_point, C
         scores = cls_preds.sigmoid()
         result_list = []
         for i in range(b):
@@ -516,3 +518,75 @@ class NanoDetPlusHead(nn.Module):
             out = torch.cat([cls_pred, reg_pred], dim=1)
             outputs.append(out.flatten(start_dim=2))
         return torch.cat(outputs, dim=2).permute(0, 2, 1)
+
+    def _forward_onnx_get_bboxes(self, feats):
+        """only used for onnx export"""
+        outputs = []
+        for i, (feat, cls_convs, gfl_cls) in enumerate(
+            zip(
+                feats,
+                self.cls_convs,
+                self.gfl_cls,
+            )
+        ):
+            for conv in cls_convs:
+                feat = conv(feat)
+            # N, C, H, W
+            output = gfl_cls(feat)
+            # N, C, H*W
+            output = output.view(
+                -1, int(output.size(1)), int(output.size(3) * output.size(2))
+            )
+            # N, H*W, C
+            output = output.permute(0, 2, 1).contiguous()  # N, H, W, C
+            cls_pred, reg_pred = output.split(
+                [self.num_classes, 4 * (self.reg_max + 1)], dim=2
+            )
+            cls_pred = cls_pred.sigmoid()
+
+            device = cls_pred.device
+            b = cls_pred.shape[0]
+            feat_shape = feat.shape
+            featmap_size = (feat_shape[-2], feat_shape[-1])
+            # TODO move this out.
+            # input_shape = (
+            #     featmap_size[0] * self.strides[i],
+            #     featmap_size[1] * self.strides[i],
+            # )
+            input_shape = None
+            center_prior = self.get_single_level_center_priors(
+                b,
+                featmap_size,
+                self.strides[i],
+                dtype=torch.float32,
+                device=device,
+            )
+            # TODO
+            dis_pred = self.distribution_project(reg_pred) * center_prior[..., 2, None]
+            bbox = distance2bbox(center_prior[..., :2], dis_pred, max_shape=input_shape)
+
+            # N, H*W, C
+            out = torch.cat([cls_pred, bbox.type_as(cls_pred)], dim=2)
+            outputs.append(out)
+        outputs = torch.cat(outputs, dim=1) # N, H*W*f, C
+        return outputs
+
+        # NMS
+        # scores = outputs[..., :self.num_classes]
+        # bboxes = outputs[..., self.num_classes:]
+        # result_list = []
+        # for i in range(b):
+        #     # add a dummy background class at the end of all labels
+        #     # same with mmdetection2.0
+        #     score, bbox = scores[i], bboxes[i]
+        #     padding = score.new_zeros(score.shape[0], 1)
+        #     score = torch.cat([score, padding], dim=1)
+        #     results = multiclass_nms(
+        #         bbox,
+        #         score,
+        #         score_thr=0.05,
+        #         nms_cfg=dict(type="nms", iou_threshold=0.6),
+        #         max_num=100,
+        #     )
+        #     result_list.append(results)
+        # return result_list
