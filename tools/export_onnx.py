@@ -67,13 +67,13 @@ def main(config, model_path, output_path, input_shape=(320, 320)):
         verbose=True,
         keep_initializers_as_inputs=True,
         opset_version=12,
-        input_names=["data"],
+        input_names=["images"],
         output_names=["output"],
     )
     logger.log("finished exporting onnx ")
 
     logger.log("start simplifying onnx ")
-    input_data = {"data": dummy_input.detach().cpu().numpy()}
+    input_data = {"images": dummy_input.detach().cpu().numpy()}
     model_sim, flag = onnxsim.simplify(output_path, input_data=input_data)
     if flag:
         onnx.save(model_sim, output_path)

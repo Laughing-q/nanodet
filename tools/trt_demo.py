@@ -14,6 +14,7 @@ import numpy as np
 import cv2
 import tensorrt as trt  # https://developer.nvidia.com/nvidia-tensorrt-download
 import time
+import torch.nn.functional as F
 
 
 def time_sync():
@@ -45,7 +46,7 @@ class Predictor(object):
             )
         self.binding_addrs = OrderedDict((n, d.ptr) for n, d in self.bindings.items())
         self.context = model.create_execution_context()
-        self.batch_size = self.bindings["data"].shape[0]
+        self.batch_size = self.bindings["images"].shape[0]
         self.num_classes = self.bindings["output"].shape[-1] - 4
 
         self.pipeline = Pipeline(cfg.data.val.pipeline, cfg.data.val.keep_ratio)
@@ -65,17 +66,21 @@ class Predictor(object):
         # preprocess
         meta = self.pipeline(None, meta, self.cfg.data.val.input_size)
         # TODO
-        meta["img"] = torch.from_numpy(meta["img"].transpose(2, 0, 1)).to(self.device)
+        meta["img"] = meta["img"].transpose(2, 0, 1)
+        meta["img"] = torch.from_numpy(np.ascontiguousarray(meta["img"])).to(
+            self.device
+        )
         meta = naive_collate([meta])
         meta["img"] = stack_batch_img(meta["img"], divisible=32).half()
+        # meta["img"] = F.pad(meta["img"], [0, 0, 0, 160], value=0)
 
-        assert meta["img"].shape == self.bindings["data"].shape, (
-            img.shape,
-            self.bindings["data"].shape,
+        assert meta["img"].shape == self.bindings["images"].shape, (
+            meta["img"].shape,
+            self.bindings["images"].shape,
         )
         # inference
         t1 = time_sync()
-        self.binding_addrs["data"] = int(meta["img"].data_ptr())
+        self.binding_addrs["images"] = int(meta["img"].data_ptr())
         self.context.execute_v2(list(self.binding_addrs.values()))
         preds = self.bindings["output"].data
         t2 = time_sync()
@@ -83,9 +88,9 @@ class Predictor(object):
         return self.postprocess(preds, meta)
 
     def postprocess(self, preds, meta):
-        h, w = meta['img'].shape[2:]
-        scores = preds[..., : self.num_classes]  # TODO
-        bboxes = preds[..., self.num_classes :]
+        h, w = meta["img"].shape[2:]
+        scores = preds[..., 4:]  # TODO
+        bboxes = preds[..., :4]
         bboxes[..., 0] = bboxes[..., 0].clamp(min=0, max=w)
         bboxes[..., 1] = bboxes[..., 1].clamp(min=0, max=h)
         bboxes[..., 2] = bboxes[..., 2].clamp(min=0, max=w)
@@ -173,7 +178,7 @@ if __name__ == "__main__":
         if not ret:
             break
         meta, res = predictor.inference(frame)
-        result_image = predictor.visualize(frame, res[0], cfg.class_names, 0.3)
+        result_image = predictor.visualize(frame, res[0], cfg.class_names, 0.4)
         cv2.imshow("p", result_image)
         if cv2.waitKey(1) == ord("q"):
             exit()

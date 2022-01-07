@@ -566,7 +566,7 @@ class NanoDetPlusHead(nn.Module):
             bbox = distance2bbox(center_prior[..., :2], dis_pred, max_shape=input_shape)
 
             # N, H*W, C
-            out = torch.cat([cls_pred, bbox.type_as(cls_pred)], dim=2)
+            out = torch.cat([bbox.type_as(cls_pred), cls_pred], dim=2)
             outputs.append(out)
         outputs = torch.cat(outputs, dim=1) # N, H*W*f, C
         return outputs
