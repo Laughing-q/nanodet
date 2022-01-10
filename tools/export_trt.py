@@ -97,5 +97,6 @@ if __name__ == "__main__":
         description="Convert .pth or .ckpt model to onnx.",
     )
     parser.add_argument("--onnx-path", default="nanodet.onnx", type=str, help="Path to .yml config file.")
+    parser.add_argument('--half', action='store_true', help='FP16 half-precision export')
     args = parser.parse_args()
-    export_engine(file=args.onnx_path, half=True)
+    export_engine(file=args.onnx_path, half=args.half)
