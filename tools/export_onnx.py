@@ -34,7 +34,7 @@ def generate_ouput_names(head_cfg):
     return cls_names + dis_names
 
 
-def main(config, model_path, output_path, input_shape=(320, 320)):
+def main(config, model_path, output_path, input_shape=(320, 320), half=False):
     logger = Logger(-1, config.save_dir, False)
     model = build_model(config.model)
     checkpoint = torch.load(model_path, map_location=lambda storage, loc: storage)
@@ -56,8 +56,9 @@ def main(config, model_path, output_path, input_shape=(320, 320)):
     # dummy_input = torch.from_numpy(img)[None, ...]
 
     dummy_input = torch.zeros(1, 3, input_shape[0], input_shape[1])
-    dummy_input = dummy_input.cuda().half()
-    model.cuda().half()
+    if half:
+        dummy_input = dummy_input.cuda().half()
+        model.cuda().half()
     model.eval()
 
     torch.onnx.export(
@@ -94,9 +95,8 @@ def parse_args():
     parser.add_argument(
         "--out_path", type=str, default="nanodet.onnx", help="Onnx model output path."
     )
-    parser.add_argument(
-        "--input_shape", type=str, default=None, help="Model intput shape."
-    )
+    parser.add_argument('--imgsz', nargs='+', type=int, default=[640, 640], help='image (h, w)')
+    parser.add_argument('--half', action='store_true', help='FP16 half-precision export')
     return parser.parse_args()
 
 
@@ -105,14 +105,16 @@ if __name__ == "__main__":
     cfg_path = args.cfg_path
     model_path = args.model_path
     out_path = args.out_path
-    input_shape = args.input_shape
+    input_shape = args.imgsz
+    half = args.half
     load_config(cfg, cfg_path)
     if input_shape is None:
         input_shape = cfg.data.train.input_size
     else:
-        input_shape = tuple(map(int, input_shape.split(",")))
+        if isinstance(input_shape, int):
+            input_shape = tuple(map(int, input_shape.split(",")))
         assert len(input_shape) == 2
     if model_path is None:
         model_path = os.path.join(cfg.save_dir, "model_best/model_best.ckpt")
-    main(cfg, model_path, out_path, input_shape)
+    main(cfg, model_path, out_path, input_shape, half)
     print("Model saved to:", out_path)
